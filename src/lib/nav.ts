@@ -15,6 +15,7 @@ import {
   Tags,
   Ruler,
   Upload,
+  ScanBarcode,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/auth";
@@ -42,6 +43,7 @@ export const navGroups: NavGroup[] = [
       { label: "Kategori", href: "/inventory/categories", icon: Tags, roles: ALL },
       { label: "Satuan", href: "/inventory/units", icon: Ruler, roles: ALL },
       { label: "Stok", href: "/inventory/stock", icon: Boxes, roles: ALL },
+      { label: "Nomor SN", href: "/inventory/serials", icon: ScanBarcode, roles: ALL },
       { label: "Transaksi", href: "/inventory/transactions", icon: ArrowLeftRight, roles: ALL },
       { label: "Stock In", href: "/inventory/stock-in", icon: PackagePlus, roles: WRITE },
       { label: "Stock Out", href: "/inventory/stock-out", icon: PackageMinus, roles: WRITE },

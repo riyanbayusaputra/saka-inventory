@@ -12,7 +12,7 @@ export type TrxInput = {
   requester: string | null;
   purpose: string | null;
   notes: string | null;
-  items: { product_id: string; quantity: number; unit_price: number }[];
+  items: { product_id: string; quantity: number; unit_price: number; serials?: string[] }[];
 };
 
 export async function submitTransaction(
@@ -28,7 +28,15 @@ export async function submitTransaction(
   if ((type === "IN" || type === "TRANSFER") && !destId) return { error: "Pilih site tujuan" };
   if (type === "TRANSFER" && sourceId === destId) return { error: "Site asal dan tujuan tidak boleh sama" };
   if (!input.items.length) return { error: "Tambahkan minimal satu barang" };
-  if (input.items.some((i) => !(i.quantity > 0))) return { error: "Qty harus lebih dari 0" };
+
+  // untuk barang ber-SN, qty selalu mengikuti jumlah SN
+  const items = input.items.map((i) => {
+    const serials = (i.serials ?? []).map((s) => s.replace(/\s+/g, "").toUpperCase()).filter(Boolean);
+    return serials.length
+      ? { ...i, serials, quantity: serials.length }
+      : { product_id: i.product_id, quantity: i.quantity, unit_price: i.unit_price };
+  });
+  if (items.some((i) => !(i.quantity > 0))) return { error: "Qty harus lebih dari 0" };
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("create_stock_transaction", {
@@ -41,7 +49,7 @@ export async function submitTransaction(
     p_requester: input.requester,
     p_purpose: input.purpose,
     p_notes: input.notes,
-    p_items: input.items,
+    p_items: items,
   });
 
   if (error) return { error: error.message };
@@ -54,4 +62,20 @@ export async function submitTransaction(
 
   revalidatePath("/", "layout");
   return { number: trx?.transaction_number };
+}
+
+export async function deleteTransaction(id: string, reason: string): Promise<{ error?: string }> {
+  const profile = await getProfile();
+  if (profile?.role !== "ADMIN") return { error: "Hanya Admin yang dapat menghapus transaksi" };
+  if (!reason.trim()) return { error: "Alasan penghapusan wajib diisi" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_stock_transaction", {
+    p_id: id,
+    p_reason: reason.trim(),
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/", "layout");
+  return {};
 }

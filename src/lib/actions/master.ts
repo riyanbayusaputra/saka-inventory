@@ -13,9 +13,9 @@ const FIELDS: Record<string, string[]> = {
   units: ["name"],
   suppliers: ["name", "address", "phone", "email"],
   sites: ["code", "name", "address", "pic", "phone", "is_warehouse"],
-  products: [
+      products: [
     "name", "category_id", "unit_id", "supplier_id", "specification", "brand",
-    "condition", "minimum_stock", "default_price", "description",
+    "condition", "minimum_stock", "default_price", "description", "track_serial", "pon_type",
   ],
 };
 

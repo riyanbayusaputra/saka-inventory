@@ -44,6 +44,10 @@ export default async function ProductsPage() {
         { key: "condition", label: "Kondisi" },
         { key: "minimum_stock", label: "Min. Stok", type: "number" },
         { key: "default_price", label: "Harga Beli", type: "currency" },
+        // di dalam columns={[ ... ]}, setelah kolom harga beli:
+        { key: "track_serial", label: "Lacak SN", type: "boolean" },
+        // di columns, setelah kolom "Lacak SN":
+{ key: "pon_type", label: "Tipe PON" },
       ]}
       fields={[
         { name: "name", label: "Nama Barang", type: "text", required: true, full: true },
@@ -62,9 +66,17 @@ export default async function ProductsPage() {
         { name: "minimum_stock", label: "Minimum Stok", type: "number" },
         { name: "default_price", label: "Harga Beli (Rp)", type: "number" },
         { name: "specification", label: "Spesifikasi", type: "textarea" },
+        // di dalam fields={[ ... ]}, sebelum field "Keterangan":
+{ name: "track_serial", label: "Lacak nomor SN per unit (untuk router)", type: "checkbox" },
+// di fields, setelah field "Lacak SN":
+{
+  name: "pon_type", label: "Tipe PON (untuk router)", type: "select",
+  options: [{ value: "GPON", label: "GPON" }, { value: "EPON", label: "EPON" }],
+},
         { name: "description", label: "Keterangan", type: "textarea" },
       ]}
-      searchKeys={["code", "name", "specification", "category_name", "brand"]}
+      // di searchKeys, tambahkan "pon_type" agar bisa dicari dengan mengetik GPON:
+searchKeys={["code", "name", "specification", "category_name", "brand", "pon_type"]}
       canEdit={profile?.role === "ADMIN"}
     />
   );
