@@ -71,3 +71,13 @@ export async function toggleActive(
   revalidatePath("/", "layout");
   return {};
 }
+export async function deleteUnusedProduct(id: string): Promise<Result> {
+  if (!(await requireAdmin())) return { error: "Hanya Admin yang dapat menghapus barang" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_unused_product", { p_id: id });
+  if (error) return { error: error.message };
+
+  revalidatePath("/", "layout");
+  return {};
+}

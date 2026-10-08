@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Search } from "lucide-react";
+import { Plus, Pencil, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +46,7 @@ type Props = {
   fields: Field[];
   searchKeys: string[];
   canEdit: boolean;
+  onDelete?: (id: string) => Promise<{ error?: string }>;
 };
 
 const PAGE_SIZE = 20;
@@ -65,12 +66,13 @@ const selectClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function MasterCrud({
-  title, description, table, rows, columns, fields, searchKeys, canEdit,
+  title, description, table, rows, columns, fields, searchKeys, canEdit, onDelete,
 }: Props) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState<Row | null>(null);
   const [pending, start] = useTransition();
 
   const filtered = useMemo(() => {
@@ -122,6 +124,17 @@ export function MasterCrud({
     });
   }
 
+  function confirmDelete() {
+    if (!deleting || !onDelete) return;
+    const row = deleting;
+    start(async () => {
+      const res = await onDelete(row.id);
+      setDeleting(null);
+      if (res.error) toast.error(res.error);
+      else toast.success("Data dihapus");
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -156,7 +169,7 @@ export function MasterCrud({
                 </TableHead>
               ))}
               <TableHead>Status</TableHead>
-              {canEdit && <TableHead className="w-24 text-right">Aksi</TableHead>}
+              {canEdit && <TableHead className="w-28 text-right">Aksi</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -189,9 +202,14 @@ export function MasterCrud({
                 </TableCell>
                 {canEdit && (
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openForm(row)}>
+                    <Button variant="ghost" size="icon" onClick={() => openForm(row)} title="Edit">
                       <Pencil className="h-4 w-4" />
                     </Button>
+                    {onDelete && (
+                      <Button variant="ghost" size="icon" onClick={() => setDeleting(row)} title="Hapus">
+                        <Trash2 className="h-4 w-4 text-red-600" />
+                      </Button>
+                    )}
                   </TableCell>
                 )}
               </TableRow>
@@ -264,6 +282,24 @@ export function MasterCrud({
               <Button type="submit" disabled={pending}>{pending ? "Menyimpan..." : "Simpan"}</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleting} onOpenChange={(o) => { if (!o) setDeleting(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hapus &quot;{String(deleting?.name ?? deleting?.code ?? "")}&quot;?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Data dihapus permanen dan tidak bisa dikembalikan. Hanya bisa untuk data yang belum pernah dipakai di
+            transaksi, PO, opname, atau SN. Jika sudah pernah dipakai, gunakan status Nonaktif.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleting(null)}>Batal</Button>
+            <Button variant="destructive" disabled={pending} onClick={confirmDelete}>
+              {pending ? "Menghapus..." : "Hapus"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

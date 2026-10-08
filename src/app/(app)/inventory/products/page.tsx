@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { MasterCrud, type Row } from "@/components/master/master-crud";
+import { deleteUnusedProduct } from "@/lib/actions/master";
 
 type ProductRow = Row & {
   categories: { name: string } | null;
@@ -78,6 +79,7 @@ export default async function ProductsPage() {
       // di searchKeys, tambahkan "pon_type" agar bisa dicari dengan mengetik GPON:
 searchKeys={["code", "name", "specification", "category_name", "brand", "pon_type"]}
       canEdit={profile?.role === "ADMIN"}
+       onDelete={deleteUnusedProduct}
     />
   );
 }

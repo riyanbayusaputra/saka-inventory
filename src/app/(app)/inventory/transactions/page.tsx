@@ -1,16 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { DeleteTransactionButton } from "@/components/inventory/delete-transaction-button";
 
 type Trx = {
   id: string;
   transaction_number: string;
   transaction_type: "IN" | "OUT" | "TRANSFER" | "ADJUSTMENT" | "RETURN";
   transaction_date: string;
-  purpose: string | null;
-  notes: string | null;
+  reference_type: string | null;
   source: { name: string } | null;
   dest: { name: string } | null;
   profiles: { full_name: string | null } | null;
@@ -23,10 +24,13 @@ const TYPE_LABEL = {
 
 export default async function TransactionsPage() {
   const supabase = await createClient();
+  const profile = await getProfile();
+  const isAdmin = profile?.role === "ADMIN";
+
   const { data } = await supabase
     .from("stock_transactions")
     .select(`
-      id, transaction_number, transaction_type, transaction_date, purpose, notes,
+      id, transaction_number, transaction_type, transaction_date, reference_type,
       source:sites!stock_transactions_source_site_id_fkey(name),
       dest:sites!stock_transactions_destination_site_id_fkey(name),
       profiles(full_name),
@@ -41,7 +45,10 @@ export default async function TransactionsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Transaksi</h1>
-        <p className="text-sm text-muted-foreground">200 transaksi terbaru. Transaksi tidak dapat diubah atau dihapus.</p>
+        <p className="text-sm text-muted-foreground">
+          200 transaksi terbaru.
+          {isAdmin && " Admin dapat menghapus transaksi; stok otomatis dikembalikan dan penghapusan tercatat di Audit Log."}
+        </p>
       </div>
 
       <div className="rounded-md border bg-background">
@@ -55,12 +62,13 @@ export default async function TransactionsPage() {
               <TableHead>Ke</TableHead>
               <TableHead>Barang</TableHead>
               <TableHead>Oleh</TableHead>
+              {isAdmin && <TableHead className="w-12" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={isAdmin ? 8 : 7} className="h-24 text-center text-muted-foreground">
                   Belum ada transaksi
                 </TableCell>
               </TableRow>
@@ -87,6 +95,15 @@ export default async function TransactionsPage() {
                     )}
                   </TableCell>
                   <TableCell>{t.profiles?.full_name ?? "-"}</TableCell>
+                  {isAdmin && (
+                    <TableCell>
+                      {t.reference_type === "OPNAME" ? (
+                        <span className="text-xs text-muted-foreground">Opname</span>
+                      ) : (
+                        <DeleteTransactionButton id={t.id} number={t.transaction_number} />
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}

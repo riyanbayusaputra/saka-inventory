@@ -1,10 +1,14 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { changeStatus } from "@/lib/actions/po";
 import { TRANSITIONS, type PoStatus } from "@/lib/po";
 
@@ -23,6 +27,7 @@ const BUTTONS: Record<PoStatus, { label: string; variant: "default" | "outline" 
 export function PoActions({ poId, status, role }: { poId: string; status: PoStatus; role: Role }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [target, setTarget] = useState<PoStatus | null>(null);
 
   if (role === "VIEWER") return null;
 
@@ -31,36 +36,55 @@ export function PoActions({ poId, status, role }: { poId: string; status: PoStat
     return status === "DRAFT" && (to === "DIAJUKAN" || to === "DIBATALKAN");
   });
 
-  function go(to: PoStatus) {
-    const conf = BUTTONS[to].confirm;
-    if (conf && !window.confirm(conf)) return;
+  function run(to: PoStatus) {
     start(async () => {
-      const res = await changeStatus(poId, to);
-      if (res.error) toast.error(res.error);
-      else {
-        toast.success("Status diperbarui");
-        router.refresh();
+      try {
+        const res = await changeStatus(poId, to);
+        if (res.error) toast.error(res.error);
+        else {
+          toast.success("Status diperbarui");
+          router.refresh();
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Terjadi kesalahan");
       }
     });
+  }
+
+  function go(to: PoStatus) {
+    if (BUTTONS[to].confirm) setTarget(to);
+    else run(to);
   }
 
   if (options.length === 0 && status !== "DRAFT") return null;
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {status === "DRAFT" && (
-        <Button
-          variant="outline"
-          onClick={() => router.push(`/procurement/purchase-orders/${poId}/edit`)}
-        >
-          <Pencil className="mr-2 h-4 w-4" /> Edit
-        </Button>
-      )}
-      {options.map((to) => (
-        <Button key={to} variant={BUTTONS[to].variant} disabled={pending} onClick={() => go(to)}>
-          {BUTTONS[to].label}
-        </Button>
-      ))}
-    </div>
+    <>
+      <div className="flex flex-wrap gap-2">
+        {status === "DRAFT" && (
+          <Button variant="outline" onClick={() => router.push(`/procurement/purchase-orders/${poId}/edit`)}>
+            <Pencil className="mr-2 h-4 w-4" /> Edit
+          </Button>
+        )}
+        {options.map((to) => (
+          <Button key={to} variant={BUTTONS[to].variant} disabled={pending} onClick={() => go(to)}>
+            {BUTTONS[to].label}
+          </Button>
+        ))}
+      </div>
+
+      <AlertDialog open={target !== null} onOpenChange={(o) => !o && setTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi</AlertDialogTitle>
+            <AlertDialogDescription>{target ? BUTTONS[target].confirm : ""}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Tidak</AlertDialogCancel>
+            <AlertDialogAction onClick={() => target && run(target)}>Ya, lanjutkan</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
