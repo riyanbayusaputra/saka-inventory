@@ -32,3 +32,41 @@ export async function registerSerials(
   revalidatePath("/inventory", "layout");
   return { count: Number(data) };
 }
+export async function lookupSerial(raw: string): Promise<{
+  found: boolean;
+  product_id?: string;
+  product_name?: string;
+  status?: "IN_STOCK" | "OUT";
+  site_id?: string | null;
+  site_name?: string | null;
+}> {
+  const profile = await getProfile();
+  if (!profile) return { found: false };
+
+  const sn = raw.replace(/\s+/g, "").toUpperCase();
+  if (!sn || sn.length > 64) return { found: false };
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("serial_numbers")
+    .select("product_id, status, site_id, products(name), sites:sites!serial_numbers_site_id_fkey(name)")
+    .eq("serial_number", sn)
+    .maybeSingle();
+  if (!data) return { found: false };
+
+  const d = data as unknown as {
+    product_id: string;
+    status: "IN_STOCK" | "OUT";
+    site_id: string | null;
+    products: { name: string } | null;
+    sites: { name: string } | null;
+  };
+  return {
+    found: true,
+    product_id: d.product_id,
+    product_name: d.products?.name,
+    status: d.status,
+    site_id: d.site_id,
+    site_name: d.sites?.name ?? null,
+  };
+}

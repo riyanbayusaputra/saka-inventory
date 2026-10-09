@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SerialInput } from "@/components/inventory/serial-input";
 import { submitTransaction } from "@/lib/actions/transactions";
+import { lookupSerial } from "@/lib/actions/serials";
 import type { FormProduct, FormSite } from "@/lib/form-data";
 
 type Type = "IN" | "OUT" | "TRANSFER";
@@ -19,16 +21,12 @@ const TEXT: Record<Type, { title: string; desc: string }> = {
   TRANSFER: { title: "Transfer Barang", desc: "Pindahkan barang dari satu site ke site lain." },
 };
 
-type Row = { key: number; q: string; qty: string; price: string; sn: string };
+type Row = { key: number; q: string; qty: string; price: string; sn: string[] };
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-// satu SN per baris; juga menerima koma, titik koma, atau hasil tempel dari Excel
-const parseSerials = (text: string) =>
-  text.split(/[\n\r,;\t]+/).map((s) => s.replace(/\s+/g, "").toUpperCase()).filter(Boolean);
-
-const emptyRow = (key: number): Row => ({ key, q: "", qty: "", price: "", sn: "" });
+const emptyRow = (key: number): Row => ({ key, q: "", qty: "", price: "", sn: [] });
 
 export function TransactionForm({
   type, products, sites, balances, serials, today,
@@ -49,7 +47,7 @@ export function TransactionForm({
   const [rows, setRows] = useState<Row[]>([emptyRow(1)]);
   const [pending, start] = useTransition();
 
- const label = (p: FormProduct) => `${p.code} - ${p.name}${p.pon_type ? ` [${p.pon_type}]` : ""}`;
+  const label = (p: FormProduct) => `${p.code} - ${p.name}${p.pon_type ? ` [${p.pon_type}]` : ""}`;
   const byLabel = new Map(products.map((p) => [label(p), p]));
 
   const needSource = type === "OUT" || type === "TRANSFER";
@@ -59,13 +57,14 @@ export function TransactionForm({
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
 
-  function toggleSn(key: number, sn: string) {
+  function onProductChange(key: number, value: string) {
     setRows((rs) =>
       rs.map((r) => {
         if (r.key !== key) return r;
-        const list = parseSerials(r.sn);
-        const next = list.includes(sn) ? list.filter((x) => x !== sn) : [...list, sn];
-        return { ...r, sn: next.join("\n") };
+        const before = byLabel.get(r.q.trim())?.id;
+        const after = byLabel.get(value.trim())?.id;
+        // ganti barang: daftar SN lama tidak berlaku lagi
+        return { ...r, q: value, sn: before && after && before !== after ? [] : r.sn };
       })
     );
   }
@@ -73,6 +72,22 @@ export function TransactionForm({
   function reset() {
     setRows([emptyRow(Date.now())]);
     setRequester(""); setPurpose(""); setNotes("");
+  }
+
+  // pengecekan instan tiap SN yang di-scan
+  async function checkSn(sn: string, p: FormProduct): Promise<string | null> {
+    const res = await lookupSerial(sn);
+    if (!res.found) return null;
+    if (res.product_id !== p.id) return `sudah terdaftar untuk barang lain (${res.product_name})`;
+    if (type === "IN") {
+      return res.status === "IN_STOCK" ? `sudah ada di stok (${res.site_name ?? "-"})` : null;
+    }
+    if (res.status !== "IN_STOCK" || res.site_id !== sourceId) {
+      return res.status === "OUT"
+        ? "sudah keluar, tidak ada di stok"
+        : `ada di ${res.site_name ?? "site lain"}, bukan di site asal`;
+    }
+    return null;
   }
 
   function onSubmit(e: React.FormEvent) {
@@ -84,10 +99,8 @@ export function TransactionForm({
       if (!p) return toast.error(`Baris ${i + 1}: pilih barang dari daftar saran`);
 
       if (p.track_serial) {
-        const list = parseSerials(r.sn);
-        if (!list.length) return toast.error(`Baris ${i + 1}: isi nomor SN untuk ${p.name}`);
-        if (new Set(list).size !== list.length) return toast.error(`Baris ${i + 1}: ada SN ganda`);
-        items.push({ product_id: p.id, quantity: list.length, unit_price: Number(r.price) || 0, serials: list });
+        if (!r.sn.length) return toast.error(`Baris ${i + 1}: isi nomor SN untuk ${p.name}`);
+        items.push({ product_id: p.id, quantity: r.sn.length, unit_price: Number(r.price) || 0, serials: r.sn });
       } else {
         const qty = Number(r.qty);
         if (!(qty > 0)) return toast.error(`Baris ${i + 1}: qty harus lebih dari 0`);
@@ -175,7 +188,6 @@ export function TransactionForm({
                 {rows.map((r) => {
                   const p = byLabel.get(r.q.trim());
                   const tracked = !!p?.track_serial;
-                  const list = tracked ? parseSerials(r.sn) : [];
                   const key = p && sourceId ? `${p.id}|${sourceId}` : "";
                   const available = needSource && p && sourceId ? balances[key] ?? 0 : null;
                   const avail = tracked && needSource && key ? serials[key] ?? [] : [];
@@ -189,7 +201,7 @@ export function TransactionForm({
                             list="product-list"
                             placeholder="Ketik kode atau nama barang..."
                             value={r.q}
-                            onChange={(e) => update(r.key, { q: e.target.value })}
+                            onChange={(e) => onProductChange(r.key, e.target.value)}
                             required
                           />
                           {available !== null && (
@@ -200,7 +212,7 @@ export function TransactionForm({
                           {tracked && <p className="mt-1 text-xs text-blue-700">Barang ini dilacak per nomor SN</p>}
                         </div>
                         {tracked ? (
-                          <Input value={String(list.length)} readOnly className="bg-muted" title="Mengikuti jumlah SN" />
+                          <Input value={String(r.sn.length)} readOnly className="bg-muted" title="Mengikuti jumlah SN" />
                         ) : (
                           <Input
                             type="number" min="0" step="any" placeholder="Qty"
@@ -222,39 +234,24 @@ export function TransactionForm({
                         </Button>
                       </div>
 
-                      {tracked && (
+                      {tracked && p && (
                         <div className="space-y-2 rounded-md bg-muted/40 p-3">
                           <Label className="text-xs">
-                            Nomor SN ({list.length} unit) — satu per baris, atau tempel dari Excel / hasil scan
+                            Nomor SN — scan barcode, ketik lalu Enter, atau tempel banyak sekaligus
                           </Label>
-                          <Textarea
-                            rows={Math.min(8, Math.max(3, list.length + 1))}
+                          <SerialInput
                             value={r.sn}
-                            onChange={(e) => update(r.key, { sn: e.target.value })}
-                            placeholder={"ZTEGC1234567\nZTEGC1234568"}
-                            className="font-mono text-sm"
+                            setList={(fn) =>
+                              setRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, sn: fn(x.sn) } : x)))
+                            }
+                            check={(sn) => checkSn(sn, p)}
+                            suggestions={avail}
+                            disabledReason={needSource && !sourceId ? "Pilih site asal dulu" : undefined}
                           />
-                          {needSource && sourceId && (
-                            <div className="space-y-1">
-                              <p className="text-xs text-muted-foreground">
-                                SN tersedia di site asal: {avail.length}
-                                {noSn > 0 && ` · stok tanpa SN: ${noSn} (ketik SN barunya, otomatis terdaftar)`}
-                              </p>
-                              {avail.length > 0 && (
-                                <div className="flex max-h-24 flex-wrap gap-1 overflow-auto">
-                                  {avail.slice(0, 80).map((sn) => (
-                                    <button
-                                      key={sn} type="button" onClick={() => toggleSn(r.key, sn)}
-                                      className={`rounded border px-2 py-0.5 font-mono text-xs ${
-                                        list.includes(sn) ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                                      }`}
-                                    >
-                                      {sn}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                          {noSn > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Stok tanpa SN: {noSn}. Scan SN barunya, otomatis terdaftar.
+                            </p>
                           )}
                         </div>
                       )}
