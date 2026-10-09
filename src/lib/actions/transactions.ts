@@ -26,7 +26,9 @@ export async function submitTransaction(
   const { type, sourceId, destId } = input;
   if ((type === "OUT" || type === "TRANSFER") && !sourceId) return { error: "Pilih site asal" };
   if ((type === "IN" || type === "TRANSFER") && !destId) return { error: "Pilih site tujuan" };
-  if (type === "TRANSFER" && sourceId === destId) return { error: "Site asal dan tujuan tidak boleh sama" };
+  if ((type === "TRANSFER" || type === "OUT") && destId && sourceId === destId) {
+    return { error: "Site tujuan tidak boleh sama dengan site asal" };
+  }
   if (!input.items.length) return { error: "Tambahkan minimal satu barang" };
 
   // untuk barang ber-SN, qty selalu mengikuti jumlah SN
@@ -43,7 +45,8 @@ export async function submitTransaction(
     p_type: type,
     p_date: input.date,
     p_source: type === "IN" ? null : sourceId,
-    p_destination: type === "OUT" ? null : destId,
+    // Stock Out: tujuan hanya catatan lokasi pemakaian (stok tujuan tidak berubah)
+    p_destination: type === "OUT" ? destId || null : destId,
     p_ref_type: null,
     p_ref_id: null,
     p_requester: input.requester,

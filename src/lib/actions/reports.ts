@@ -143,7 +143,13 @@ async function stockInOutReport(supabase: Client, f: Filters, isIn: boolean) {
     };
     return isIn
       ? { ...base, site: t.dest?.name ?? null, price: n(r.unit_price), total: n(r.subtotal), ref: refOf(t) }
-      : { ...base, site: t.source?.name ?? null, requester: t.requester, purpose: t.purpose };
+      : {
+          ...base,
+          site: t.source?.name ?? null,
+          dest: t.dest?.name ?? null,
+          requester: t.requester,
+          purpose: t.purpose,
+        };
   });
 
   const columns: Col[] = isIn
@@ -157,7 +163,8 @@ async function stockInOutReport(supabase: Client, f: Filters, isIn: boolean) {
     : [
         { key: "date", label: "Tanggal" }, { key: "no", label: "No. Transaksi" },
         { key: "code", label: "Kode" }, { key: "name", label: "Barang" }, { key: "unit", label: "Satuan" },
-        { key: "site", label: "Site Asal" }, { key: "qty", label: "Qty", type: "number" },
+        { key: "site", label: "Site Asal" }, { key: "dest", label: "Site Tujuan" },
+        { key: "qty", label: "Qty", type: "number" },
         { key: "requester", label: "Pemakai" }, { key: "purpose", label: "Keperluan" }, { key: "by", label: "Oleh" },
       ];
 

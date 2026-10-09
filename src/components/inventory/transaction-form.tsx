@@ -52,6 +52,7 @@ export function TransactionForm({
 
   const needSource = type === "OUT" || type === "TRANSFER";
   const needDest = type === "IN" || type === "TRANSFER";
+  const showDest = needDest || type === "OUT";
 
   function update(key: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -93,6 +94,10 @@ export function TransactionForm({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    if (type === "OUT" && destId && destId === sourceId) {
+  return toast.error("Site tujuan tidak boleh sama dengan site asal");
+}
+
     const items: { product_id: string; quantity: number; unit_price: number; serials?: string[] }[] = [];
     for (const [i, r] of rows.entries()) {
       const p = byLabel.get(r.q.trim());
@@ -112,7 +117,7 @@ export function TransactionForm({
       const res = await submitTransaction({
         type, date,
         sourceId: needSource ? sourceId || null : null,
-        destId: needDest ? destId || null : null,
+       destId: showDest ? destId || null : null,
         requester: requester.trim() || null,
         purpose: purpose.trim() || null,
         notes: notes.trim() || null,
@@ -154,15 +159,27 @@ export function TransactionForm({
                   </select>
                 </div>
               )}
-              {needDest && (
-                <div className="space-y-2">
-                  <Label>{type === "IN" ? "Site Tujuan" : "Ke Site"}</Label>
-                  <select className={selectClass} value={destId} onChange={(e) => setDestId(e.target.value)} required>
-                    <option value="">-- Pilih --</option>
-                    {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-              )}
+           {showDest && (
+  <div className="space-y-2">
+    <Label>
+      {type === "IN" ? "Site Tujuan" : type === "OUT" ? "Site Tujuan (opsional)" : "Ke Site"}
+    </Label>
+    <select
+      className={selectClass}
+      value={destId}
+      onChange={(e) => setDestId(e.target.value)}
+      required={needDest}
+    >
+      <option value="">{type === "OUT" ? "-- Tidak ada --" : "-- Pilih --"}</option>
+      {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+    </select>
+    {type === "OUT" && (
+      <p className="text-xs text-muted-foreground">
+        Hanya catatan lokasi pemakaian, stok di site tujuan tidak bertambah. Untuk memindahkan stok, pakai Transfer.
+      </p>
+    )}
+  </div>
+)}
             </div>
 
             {type === "OUT" && (
