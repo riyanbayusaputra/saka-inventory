@@ -9,7 +9,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { deleteTransaction } from "@/lib/actions/transactions";
 
-export function DeleteTransactionButton({ id, number }: { id: string; number: string }) {
+export function DeleteTransactionButton({
+  id, number, redirectTo, withLabel = false,
+}: {
+  id: string;
+  number: string;
+  redirectTo?: string;
+  withLabel?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -23,15 +30,22 @@ export function DeleteTransactionButton({ id, number }: { id: string; number: st
       toast.success(`Transaksi ${number} dihapus, stok dikembalikan`);
       setOpen(false);
       setReason("");
-      router.refresh();
+      if (redirectTo) router.push(redirectTo);
+      else router.refresh();
     });
   }
 
   return (
     <>
-      <Button variant="ghost" size="icon" onClick={() => setOpen(true)} title="Hapus transaksi">
-        <Trash2 className="h-4 w-4 text-red-600" />
-      </Button>
+      {withLabel ? (
+        <Button variant="destructive" onClick={() => setOpen(true)}>
+          <Trash2 className="mr-2 h-4 w-4" /> Hapus Transaksi
+        </Button>
+      ) : (
+        <Button variant="ghost" size="icon" onClick={() => setOpen(true)} title="Hapus transaksi">
+          <Trash2 className="h-4 w-4 text-red-600" />
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">

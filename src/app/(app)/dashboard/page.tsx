@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  Package, Boxes, AlertTriangle, PackageX, Wallet, ShoppingCart,
+  Package, Boxes, AlertTriangle, PackageX, Wallet, ShoppingCart, ScanBarcode, Briefcase,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
@@ -32,6 +32,8 @@ type Recent = {
   transaction_number: string;
   transaction_type: "IN" | "OUT" | "TRANSFER" | "ADJUSTMENT" | "RETURN";
   transaction_date: string;
+  source: { name: string } | null;
+  dest: { name: string } | null;
   stock_transaction_items: { quantity: number; products: { name: string } | null }[];
 };
 
@@ -57,8 +59,9 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const profile = await getProfile();
   const months = lastMonths(6);
+  const showAssets = profile?.role === "ADMIN" || profile?.role === "VIEWER";
 
-  const [statsRes, moveRes, topRes, lowRes, recentRes] = await Promise.all([
+  const [statsRes, moveRes, topRes, lowRes, recentRes, snRes, assetRes] = await Promise.all([
     supabase.rpc("dashboard_stats"),
     supabase.from("v_monthly_movement").select("month, transaction_type, total_qty").gte("month", months[0].key),
     supabase.from("v_top_used").select("product_id, name, total_out").order("total_out", { ascending: false }).limit(5),
@@ -68,15 +71,33 @@ export default async function DashboardPage() {
       .order("total_quantity")
       .limit(10),
     supabase.from("stock_transactions")
-      .select("id, transaction_number, transaction_type, transaction_date, stock_transaction_items(quantity, products(name))")
+      .select(`
+        id, transaction_number, transaction_type, transaction_date,
+        source:sites!stock_transactions_source_site_id_fkey(name),
+        dest:sites!stock_transactions_destination_site_id_fkey(name),
+        stock_transaction_items(quantity, products(name))
+      `)
       .order("created_at", { ascending: false })
       .limit(5),
+    supabase.from("v_serial_coverage").select("without_sn").limit(1000),
+    showAssets
+      ? supabase.from("assets").select("price").eq("is_active", true).limit(1000)
+      : Promise.resolve(null),
   ]);
 
   const stats = statsRes.data as Stats | null;
   const top = (topRes.data ?? []) as TopRow[];
   const low = (lowRes.data ?? []) as LowRow[];
   const recent = (recentRes.data ?? []) as unknown as Recent[];
+
+  // kartu tambahan: disembunyikan bila tabel/view-nya belum ada
+  const snMissing = snRes.error
+    ? null
+    : (snRes.data ?? []).reduce((s, r) => s + Number(r.without_sn), 0);
+  const assetValue =
+    assetRes && !assetRes.error
+      ? (assetRes.data ?? []).reduce((s, r) => s + Number(r.price), 0)
+      : null;
 
   const chart: MonthPoint[] = months.map((mo) => {
     const rows = (moveRes.data ?? []).filter((r) => String(r.month).slice(0, 10) === mo.key);
@@ -110,6 +131,17 @@ export default async function DashboardPage() {
         <StatCard label="Stok Habis" value={number(stats?.out_of_stock ?? 0)} icon={PackageX} tone="danger" />
         <StatCard label="Total Nilai Inventory" value={rupiah(Number(stats?.inventory_value ?? 0))} icon={Wallet} />
         <StatCard label="Pengadaan Bulan Ini" value={rupiah(Number(stats?.procurement_month ?? 0))} icon={ShoppingCart} />
+
+        {snMissing !== null && snMissing > 0 && (
+          <Link href="/inventory/serials" className="block">
+            <StatCard label="Unit belum ber-SN" value={number(snMissing)} icon={ScanBarcode} tone="warning" />
+          </Link>
+        )}
+        {assetValue !== null && (
+          <Link href="/assets" className="block">
+            <StatCard label="Total Nilai Aset" value={rupiah(assetValue)} icon={Briefcase} />
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -172,14 +204,18 @@ export default async function DashboardPage() {
             {recent.length === 0 && <p className="text-sm text-muted-foreground">Belum ada transaksi.</p>}
             {recent.map((t) => {
               const items = t.stock_transaction_items;
+              const route = [t.source?.name, t.dest?.name].filter(Boolean).join(" → ");
               return (
                 <div key={t.id} className="flex items-start justify-between gap-3 text-sm">
                   <div className="min-w-0">
-                    <p className="font-mono text-xs">{t.transaction_number}</p>
+                    <Link href={`/inventory/transactions/${t.id}`} className="font-mono text-xs font-medium hover:underline">
+                      {t.transaction_number}
+                    </Link>
                     <p className="truncate text-muted-foreground">
                       {items[0]?.products?.name} × {Number(items[0]?.quantity ?? 0)}
                       {items.length > 1 && ` +${items.length - 1} lainnya`}
                     </p>
+                    {route && <p className="truncate text-xs text-muted-foreground">{route}</p>}
                   </div>
                   <div className="shrink-0 text-right">
                     <Badge variant={t.transaction_type === "OUT" ? "destructive" : "secondary"}>

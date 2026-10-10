@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +47,7 @@ export default async function TransactionsPage() {
       <div>
         <h1 className="text-2xl font-bold">Transaksi</h1>
         <p className="text-sm text-muted-foreground">
-          200 transaksi terbaru.
+          200 transaksi terbaru. Klik nomor transaksi untuk melihat detailnya.
           {isAdmin && " Admin dapat menghapus transaksi; stok otomatis dikembalikan dan penghapusan tercatat di Audit Log."}
         </p>
       </div>
@@ -78,7 +79,11 @@ export default async function TransactionsPage() {
               return (
                 <TableRow key={t.id}>
                   <TableCell>{t.transaction_date}</TableCell>
-                  <TableCell className="font-mono text-xs">{t.transaction_number}</TableCell>
+                  <TableCell>
+                    <Link href={`/inventory/transactions/${t.id}`} className="font-mono text-xs font-medium hover:underline">
+                      {t.transaction_number}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     <Badge variant={t.transaction_type === "OUT" ? "destructive" : "secondary"}>
                       {TYPE_LABEL[t.transaction_type]}

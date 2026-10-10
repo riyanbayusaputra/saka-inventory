@@ -11,6 +11,7 @@ import {
 type Product = {
   id: string; code: string; name: string; specification: string | null; brand: string | null;
   condition: string; minimum_stock: number; default_price: number; avg_cost: number;
+  track_serial?: boolean; pon_type?: string | null;
   categories: { name: string } | null;
   units: { name: string } | null;
   suppliers: { name: string } | null;
@@ -19,8 +20,12 @@ type Balance = { quantity: number; sites: { name: string } | null };
 type Movement = {
   id: string; change_qty: number; balance_after: number; created_at: string;
   sites: { name: string } | null;
-  stock_transactions: { transaction_number: string; transaction_type: string; transaction_date: string } | null;
+  stock_transactions: {
+    id: string; transaction_number: string; transaction_type: string; transaction_date: string;
+  } | null;
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const rupiah = (n: number) =>
   new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
@@ -31,6 +36,7 @@ export default async function ProductDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  if (!UUID.test(id)) notFound();
   const supabase = await createClient();
 
   const [prod, bal, mov] = await Promise.all([
@@ -39,10 +45,10 @@ export default async function ProductDetailPage({
       .eq("id", id).maybeSingle(),
     supabase.from("stock_balances").select("quantity, sites(name)").eq("product_id", id),
     supabase.from("stock_movements")
-      .select("id, change_qty, balance_after, created_at, sites(name), stock_transactions(transaction_number, transaction_type, transaction_date)")
+      .select("id, change_qty, balance_after, created_at, sites(name), stock_transactions(id, transaction_number, transaction_type, transaction_date)")
       .eq("product_id", id)
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(30),
   ]);
 
   if (!prod.data) notFound();
@@ -60,9 +66,21 @@ export default async function ProductDetailPage({
         <ArrowLeft className="mr-1 h-4 w-4" /> Kembali ke Barang
       </Link>
 
-      <div>
-        <h1 className="text-2xl font-bold">{p.name}</h1>
-        <p className="text-sm text-muted-foreground">{p.code} · {p.condition}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">{p.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {p.code} · {p.condition}
+            {p.pon_type && <Badge variant="outline" className="ml-2">{p.pon_type}</Badge>}
+            {p.track_serial && <Badge variant="secondary" className="ml-2">Lacak SN</Badge>}
+          </p>
+        </div>
+        <Link
+          href={`/inventory/products/${id}/card`}
+          className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          Kartu Stok Lengkap
+        </Link>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -101,7 +119,12 @@ export default async function ProductDetailPage({
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Riwayat Mutasi</CardTitle></CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-base">Riwayat Mutasi Terbaru</CardTitle>
+          <Link href={`/inventory/products/${id}/card`} className="text-sm text-muted-foreground hover:underline">
+            Lihat semua di Kartu Stok
+          </Link>
+        </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
@@ -122,11 +145,18 @@ export default async function ProductDetailPage({
               )}
               {movements.map((m) => {
                 const q = Number(m.change_qty);
+                const t = m.stock_transactions;
                 return (
                   <TableRow key={m.id}>
-                    <TableCell>{m.stock_transactions?.transaction_date}</TableCell>
-                    <TableCell className="font-mono text-xs">{m.stock_transactions?.transaction_number}</TableCell>
-                    <TableCell>{m.stock_transactions?.transaction_type}</TableCell>
+                    <TableCell>{t?.transaction_date}</TableCell>
+                    <TableCell>
+                      {t ? (
+                        <Link href={`/inventory/transactions/${t.id}`} className="font-mono text-xs hover:underline">
+                          {t.transaction_number}
+                        </Link>
+                      ) : "-"}
+                    </TableCell>
+                    <TableCell>{t?.transaction_type}</TableCell>
                     <TableCell>{m.sites?.name}</TableCell>
                     <TableCell className={`text-right font-medium ${q < 0 ? "text-red-600" : "text-green-700"}`}>
                       {q > 0 ? `+${q}` : q}
