@@ -16,6 +16,7 @@ import {
   Ruler,
   Upload,
   ScanBarcode,
+  Briefcase,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/auth";
@@ -49,6 +50,7 @@ export const navGroups: NavGroup[] = [
       { label: "Stock Out", href: "/inventory/stock-out", icon: PackageMinus, roles: WRITE },
       { label: "Transfer", href: "/inventory/transfer", icon: Truck, roles: WRITE },
       { label: "Stock Opname", href: "/inventory/opname", icon: ClipboardCheck, roles: ALL },
+      { label: "Aset & Inventaris", href: "/assets", icon: Briefcase, roles: ["ADMIN", "VIEWER"] },
     ],
   },
   {
